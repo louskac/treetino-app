@@ -61,6 +61,47 @@
             transform: rotate(360deg);
         }
     }
+
+    @keyframes float-up {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+}
+
+.animate-float-up {
+    animation: var(--animate-float-up);
+    /* Or direct usage */
+    animation: float-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.striped-bar {
+    background-image: linear-gradient(45deg,
+            rgba(255, 255, 255, 0.15) 25%,
+            transparent 25%,
+            transparent 50%,
+            rgba(255, 255, 255, 0.15) 50%,
+            rgba(255, 255, 255, 0.15) 75%,
+            transparent 75%,
+            transparent);
+    background-size: 1rem 1rem;
+    animation: stripe-move 1s linear infinite;
+}
+
+@keyframes stripe-move {
+    0% {
+        background-position: 0 0;
+    }
+
+    100% {
+        background-position: 1rem 0;
+    }
 }
 
 :root {

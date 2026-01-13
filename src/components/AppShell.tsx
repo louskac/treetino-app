@@ -6,9 +6,9 @@ import { usePathname } from 'next/navigation';
 import { TreeContext } from '@/src/context/TreeContext';
 
 const NAV_ITEMS = [
-    { label: 'Monitor', icon: 'speed', href: '/monitor' },
+    { label: 'Home', icon: 'home', href: '/' },
     { label: 'Marketplace', icon: 'storefront', href: '/marketplace' },
-    { label: 'Charging', icon: 'ev_station', href: '/charging' },
+    { label: 'Profile', icon: 'person', href: '/profile' },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
