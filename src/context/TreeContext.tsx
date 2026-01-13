@@ -163,56 +163,45 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
     const [userInvestments, setUserInvestments] = useState<UserInvestment[]>(INITIAL_INVESTMENTS);
 
     useEffect(() => {
-        const timer = setInterval(() => {
-            // --- Asset Lifecycle & Output Simulation ---
-            let cycleYield = 0; // $
+        const fetchData = async () => {
+            try {
+                const res = await fetch('https://treetino-victronenergy.up.railway.app/api/status');
+                const data = await res.json();
 
-            const updatedAssets = assets.map(asset => {
-                let updated = { ...asset };
+                // { solarW: number, soc: number, netPowerW: number, isBulbOn: boolean, timestamp: string }
 
-                // 1. Advance Construction
-                if (asset.status === 'CONSTRUCTED') {
-                    updated.constructionProgress = Math.min(100, asset.constructionProgress + Math.random() * 2);
-                    if (updated.constructionProgress >= 100) {
-                        updated.status = 'LIVE';
+                setAssets(prevAssets => prevAssets.map(asset => {
+                    // Only map real data to Asset ID 1 (Prague) for now
+                    if (asset.id === 1 && asset.status === 'LIVE') {
+                        return {
+                            ...asset,
+                            currentWattage: data.solarW, // Map solarW directly
+                            // We don't have a direct 'battery' field yet, maybe reuse voltage for now or just ignore soc?
+                            // Let's assume voltage is still simulated or constant 48V for now as API doesn't give voltage.
+                            voltage: 48.0,
+                            totalProductionKwh: asset.totalProductionKwh + (data.solarW / 3600), // Accumulate
+                        };
                     }
-                }
 
-                // 2. Production Logic (For LIVE assets)
-                if (asset.status === 'LIVE') {
-                    // Random fluctuation factor (clouds/wind) 0.8 - 1.0
-                    const efficiency = 0.8 + (Math.random() * 0.2);
-                    const currentOutputKw = asset.nominalPower * efficiency;
+                    // Keep other assets simulated or zeroed
+                    return asset;
+                }));
 
-                    // Update telemetry
-                    updated.currentWattage = +(currentOutputKw * 1000).toFixed(0);
-                    updated.voltage = +(48.0 + (Math.random() - 0.5) * 0.5).toFixed(1);
+                // Update Balance logic (simplified)
+                const cycleYield = (data.solarW * 0.005); // Mock yield calculation based on real W
+                const evCost = evMode ? 0.05 : 0;
+                setBalance(prev => +(prev + cycleYield - evCost).toFixed(4));
 
-                    updated.totalProductionKwh += (currentOutputKw / 3600); // Very rough integration (kW per second/hour)
+            } catch (err) {
+                console.error("Failed to fetch live status:", err);
+            }
+        };
 
-                    // Calculate Yield for user if they own it
-                    const inv = userInvestments.find(i => i.assetId === asset.id);
-                    if (inv) {
-                        // Yield: 0.005 $ per kW produced
-                        cycleYield += (currentOutputKw * inv.shareCount * 0.005);
-                    }
-                } else {
-                    updated.currentWattage = 0;
-                    updated.voltage = 0;
-                }
+        const timer = setInterval(fetchData, 2000);
+        fetchData(); // Initial call
 
-                return updated;
-            });
-
-            setAssets(updatedAssets);
-
-            // --- Balance Update ---
-            const evCost = evMode ? 0.05 : 0;
-            setBalance(prev => +(prev + cycleYield - evCost).toFixed(4));
-
-        }, 2000);
         return () => clearInterval(timer);
-    }, [evMode, assets, userInvestments]);
+    }, [evMode]);
 
     const investInAsset = (assetId: number, amount: number) => {
         const assetIndex = assets.findIndex(a => a.id === assetId);
