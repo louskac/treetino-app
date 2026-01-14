@@ -5,6 +5,7 @@ import { notFound, useParams } from 'next/navigation';
 import { TreeContext } from '@/src/context/TreeContext';
 import { AssetGauge } from '@/src/components/AssetGauge';
 import { AssetCharging } from '@/src/components/AssetCharging';
+import { OnChainVerification } from '@/src/components/OnChainVerification';
 
 type Tab = 'MONITOR' | 'CHARGING' | 'SPECS';
 
@@ -74,7 +75,10 @@ export default function AssetDetailsPage() {
                 {activeTab === 'MONITOR' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {asset.status === 'LIVE' ? (
-                            <AssetGauge asset={asset} />
+                            <>
+                                <AssetGauge asset={asset} />
+                                <OnChainVerification asset={asset} />
+                            </>
                         ) : (
                             <div className="glass p-10 rounded-3xl text-center border-dashed border border-white/10">
                                 <span className="material-symbols-outlined text-4xl text-gray-600 mb-4">lock_clock</span>

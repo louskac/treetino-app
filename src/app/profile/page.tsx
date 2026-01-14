@@ -2,6 +2,7 @@
 
 import React, { useContext } from 'react';
 import { TreeContext } from '@/src/context/TreeContext';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 export default function ProfilePage() {
     const { userBalance } = useContext(TreeContext);
@@ -35,25 +36,121 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Wallet Section */}
-                <div className="glass rounded-3xl p-8 border border-white/5 mb-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-white">Wallet Balance</h3>
-                        <button className="text-xs text-primary font-bold hover:text-white transition-colors">HISTORY</button>
-                    </div>
+                <div className="glass rounded-3xl p-8 border border-white/5 mb-6 relative overflow-hidden group">
+                    {/* Background decoration */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] group-hover:bg-primary/10 transition-colors pointer-events-none"></div>
 
-                    <div className="text-4xl font-bold text-white font-mono mb-2">
-                        ${userBalance.toFixed(2)}
-                    </div>
-                    <p className="text-xs text-gray-500 mb-6">Available for investment or withdrawal</p>
+                    <ConnectButton.Custom>
+                        {({
+                            account,
+                            chain,
+                            openAccountModal,
+                            openChainModal,
+                            openConnectModal,
+                            authenticationStatus,
+                            mounted,
+                        }) => {
+                            const ready = mounted && authenticationStatus !== 'loading';
+                            const connected =
+                                ready &&
+                                account &&
+                                chain &&
+                                (!authenticationStatus ||
+                                    authenticationStatus === 'authenticated');
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <button className="py-3 rounded-xl bg-primary text-black font-bold hover:bg-white transition-colors">
-                            Deposit
-                        </button>
-                        <button className="py-3 rounded-xl bg-white/5 text-white font-bold border border-white/10 hover:bg-white/10 transition-colors">
-                            Withdraw
-                        </button>
-                    </div>
+                            if (!connected) {
+                                return (
+                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                        <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 border border-white/10">
+                                            <span className="material-symbols-outlined text-3xl text-gray-400">account_balance_wallet</span>
+                                        </div>
+                                        <h3 className="text-xl font-bold text-white mb-2">Connect Your Wallet</h3>
+                                        <p className="text-gray-400 text-sm mb-6 max-w-xs">
+                                            Connect your Web3 wallet to access your real balance and assets on Mantle Testnet.
+                                        </p>
+                                        <button
+                                            onClick={openConnectModal}
+                                            className="px-8 py-3 rounded-xl bg-primary text-black font-bold hover:bg-white transition-all shadow-[0_0_20px_rgba(0,224,255,0.3)] hover:shadow-[0_0_30px_rgba(0,224,255,0.5)] transform hover:-translate-y-1"
+                                        >
+                                            Connect Wallet
+                                        </button>
+                                    </div>
+                                );
+                            }
+
+                            if (chain.unsupported) {
+                                return (
+                                    <div className="flex flex-col items-center justify-center py-8">
+                                        <span className="material-symbols-outlined text-4xl text-red-500 mb-4">warning</span>
+                                        <h3 className="text-xl font-bold text-white mb-2">Wrong Network</h3>
+                                        <p className="text-gray-400 text-sm mb-6">Please switch to Mantle Sepolia Testnet.</p>
+                                        <button
+                                            onClick={openChainModal}
+                                            className="px-6 py-2 rounded-xl bg-red-500 text-white font-bold hover:bg-red-400 transition-colors shadow-lg shadow-red-500/20"
+                                        >
+                                            Switch Network
+                                        </button>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <p className="text-sm text-gray-400 font-medium mb-1">Total Balance</p>
+                                            <div className="text-4xl font-bold text-white font-mono tracking-tight drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                                                ${userBalance.toFixed(2)}
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={openChainModal}
+                                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 hover:bg-white/5 transition-colors group/chain"
+                                        >
+                                            {chain.hasIcon && (
+                                                <div
+                                                    className="w-5 h-5 rounded-full overflow-hidden"
+                                                    style={{ background: chain.iconBackground }}
+                                                >
+                                                    {chain.iconUrl && (
+                                                        <img
+                                                            alt={chain.name ?? 'Chain icon'}
+                                                            src={chain.iconUrl}
+                                                            className="w-full h-full"
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
+                                            <span className="text-xs font-bold text-gray-300 group-hover/chain:text-white">{chain.name}</span>
+                                        </button>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 mb-8">
+                                        <button
+                                            onClick={openAccountModal}
+                                            className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors group/addr"
+                                        >
+                                            <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                                            <span className="text-xs font-mono text-primary group-hover/addr:text-white transition-colors">
+                                                {account.displayName}
+                                            </span>
+                                            <span className="material-symbols-outlined text-[10px] text-primary/50">open_in_new</span>
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <button className="py-3 rounded-xl bg-white text-black font-bold hover:bg-gray-200 transition-colors shadow-lg">
+                                            Deposit
+                                        </button>
+                                        <button className="py-3 rounded-xl bg-black/40 text-white font-bold border border-white/10 hover:bg-white/5 transition-colors">
+                                            Withdraw
+                                        </button>
+                                    </div>
+                                </>
+                            );
+                        }}
+                    </ConnectButton.Custom>
                 </div>
 
                 {/* Settings List */}

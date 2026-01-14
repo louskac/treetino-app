@@ -1,4 +1,6 @@
 import "./globals.css";
+import '@rainbow-me/rainbowkit/styles.css';
+import { Providers } from "@/src/components/Providers";
 import { Space_Grotesk } from "next/font/google";
 import { TreeProvider } from "@/src/context/TreeContext";
 import AppShell from "@/src/components/AppShell";
@@ -20,11 +22,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 />
             </head>
             <body className={`${spaceGrotesk.className} antialiased`}>
-                <TreeProvider>
-                    <AppShell>
-                        {children}
-                    </AppShell>
-                </TreeProvider>
+                <Providers>
+                    <TreeProvider>
+                        <AppShell>
+                            {children}
+                        </AppShell>
+                    </TreeProvider>
+                </Providers>
             </body>
         </html>
     );

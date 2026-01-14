@@ -1,7 +1,19 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAccount, useBalance } from 'wagmi';
+import { formatUnits } from 'viem';
 
 export type AssetStatus = 'OPEN' | 'CONSTRUCTED' | 'LIVE';
+
+export interface VerificationData {
+    timestamp: number;
+    txHash: string;
+    blockNumber: number;
+    values: {
+        solarW: number;
+        battery: number;
+    };
+}
 
 export interface Asset {
     id: number;
@@ -28,6 +40,10 @@ export interface Asset {
     // Real-time Telemetry (Simulated)
     currentWattage: number;
     voltage: number;
+    batteryLevel?: number;
+
+    // On-Chain Verification
+    verification?: VerificationData;
 }
 
 export interface UserInvestment {
@@ -71,7 +87,17 @@ const INITIAL_ASSETS: Asset[] = [
         totalProductionKwh: 4500,
         nominalPower: 5.5, // kW
         currentWattage: 4200,
-        voltage: 48.2
+        voltage: 48.2,
+        batteryLevel: 87.0,
+        verification: {
+            timestamp: Date.now() - 1000 * 60 * 2, // 2 mins ago
+            txHash: '0x473100c77eef7fb91ee90142a758da918987c1ede919d7626028d94c54978a4f',
+            blockNumber: 33384632,
+            values: {
+                solarW: 34.0,
+                battery: 87.1
+            }
+        }
     },
     {
         id: 2,
@@ -162,6 +188,19 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
     const [assets, setAssets] = useState<Asset[]>(INITIAL_ASSETS);
     const [userInvestments, setUserInvestments] = useState<UserInvestment[]>(INITIAL_INVESTMENTS);
 
+    const { address, isConnected } = useAccount();
+    const { data: balanceData } = useBalance({
+        address: address,
+    });
+
+    useEffect(() => {
+        if (isConnected && balanceData) {
+            // Use real wallet balance (formatted from wei)
+            const formattedBalance = formatUnits(balanceData.value, balanceData.decimals);
+            setBalance(parseFloat(formattedBalance));
+        }
+    }, [isConnected, balanceData]);
+
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -173,13 +212,31 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
                 setAssets(prevAssets => prevAssets.map(asset => {
                     // Only map real data to Asset ID 1 (Prague) for now
                     if (asset.id === 1 && asset.status === 'LIVE') {
+                        // Sync Verification Data
+                        let verification = asset.verification;
+                        const now = Date.now();
+                        const timeSinceLastVerify = now - (verification?.timestamp || 0);
+
+                        // Mock new imprint if > 15 mins
+                        if (timeSinceLastVerify > 15 * 60 * 1000) {
+                            verification = {
+                                timestamp: now,
+                                txHash: '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+                                blockNumber: (verification?.blockNumber || 33384632) + 1,
+                                values: {
+                                    solarW: data.solarW,
+                                    battery: data.soc
+                                }
+                            };
+                        }
+
                         return {
                             ...asset,
-                            currentWattage: data.solarW, // Map solarW directly
-                            // We don't have a direct 'battery' field yet, maybe reuse voltage for now or just ignore soc?
-                            // Let's assume voltage is still simulated or constant 48V for now as API doesn't give voltage.
+                            currentWattage: data.solarW,
+                            batteryLevel: data.soc,
                             voltage: 48.0,
-                            totalProductionKwh: asset.totalProductionKwh + (data.solarW / 3600), // Accumulate
+                            totalProductionKwh: asset.totalProductionKwh + (data.solarW / 3600),
+                            verification
                         };
                     }
 
@@ -188,12 +245,29 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
                 }));
 
                 // Update Balance logic (simplified)
-                const cycleYield = (data.solarW * 0.005); // Mock yield calculation based on real W
-                const evCost = evMode ? 0.05 : 0;
-                setBalance(prev => +(prev + cycleYield - evCost).toFixed(4));
+                // If NOT connected to wallet, use simulation. If connected, balance comes from chain.
+                if (!isConnected) {
+                    const cycleYield = (data.solarW * 0.005); // Mock yield calculation based on real W
+                    const evCost = evMode ? 0.05 : 0;
+                    setBalance(prev => +(prev + cycleYield - evCost).toFixed(4));
+                }
 
             } catch (err) {
                 console.error("Failed to fetch live status:", err);
+
+                // Fallback: If live data fails, restore state from last immutable on-chain imprint
+                setAssets(prevAssets => prevAssets.map(asset => {
+                    if (asset.id === 1 && asset.status === 'LIVE' && asset.verification) {
+                        return {
+                            ...asset,
+                            currentWattage: asset.verification.values.solarW,
+                            batteryLevel: asset.verification.values.battery,
+                            voltage: 48.0,
+                            // Mark as relying on verification data implicitly
+                        };
+                    }
+                    return asset;
+                }));
             }
         };
 
@@ -201,7 +275,7 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
         fetchData(); // Initial call
 
         return () => clearInterval(timer);
-    }, [evMode]);
+    }, [evMode, isConnected]);
 
     const investInAsset = (assetId: number, amount: number) => {
         const assetIndex = assets.findIndex(a => a.id === assetId);
