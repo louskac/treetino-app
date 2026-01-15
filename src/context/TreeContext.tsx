@@ -1,7 +1,8 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useAccount, useBalance } from 'wagmi';
-import { formatUnits } from 'viem';
+import { useAccount, useBalance, useReadContract, useWriteContract, useSendTransaction } from 'wagmi';
+import { formatUnits, parseUnits } from 'viem';
+import { TREE_TOKEN_ADDRESS, TREE_TOKEN_ABI, TREE_VAULT_ADDRESS, TREE_VAULT_ABI } from '../config/contracts';
 
 export type AssetStatus = 'OPEN' | 'CONSTRUCTED' | 'LIVE';
 
@@ -56,7 +57,14 @@ interface TreeContextType {
     // Global aggregates
     totalPortfolioValue: number;
     totalDailyRevenue: number;
-    userBalance: number;
+
+    // Balances
+    userBalance: number; // MNT (Investable Principal)
+    yieldBalance: number; // TREE (Earned Yield from Contract)
+
+    // Actions
+    depositMnt: (amount: number) => void;
+    withdrawMnt: (amount: number) => void;
 
     // EV Charging global state (could be per-asset later, keeping global for simplicity/demo)
     isEVCharging: boolean;
@@ -90,84 +98,27 @@ const INITIAL_ASSETS: Asset[] = [
         voltage: 48.2,
         batteryLevel: 87.0,
         verification: {
-            timestamp: Date.now() - 1000 * 60 * 2, // 2 mins ago
-            txHash: '0x473100c77eef7fb91ee90142a758da918987c1ede919d7626028d94c54978a4f',
+            timestamp: 1704067200000,
+            txHash: '0x712903...',
             blockNumber: 33384632,
-            values: {
-                solarW: 34.0,
-                battery: 87.1
-            }
+            values: { solarW: 4200, battery: 87 }
         }
     },
     {
         id: 2,
         name: 'Treetino Unit [Berlin]',
         location: 'Berlin, DE',
-        yieldApy: '12% APY',
-        price: 850,
-        type: 'Hybrid Tree',
-        color: 'from-green-400 to-emerald-600',
+        yieldApy: '12.5% APY',
+        price: 1200,
+        type: 'Wind Tree',
+        color: 'from-blue-400 to-cyan-500',
         status: 'OPEN',
-        raisedAmount: 15000,
-        targetAmount: 85000,
+        raisedAmount: 15400,
+        targetAmount: 120000,
         constructionProgress: 0,
-        dailyRevenue: 0,
+        dailyRevenue: 0, // Not live
         totalProductionKwh: 0,
         nominalPower: 4.2,
-        currentWattage: 0,
-        voltage: 0
-    },
-    {
-        id: 3,
-        name: 'Treetino Unit [Dubai]',
-        location: 'Dubai, UAE',
-        yieldApy: '18% APY',
-        price: 1200,
-        type: 'Solar Tree',
-        color: 'from-yellow-400 to-orange-500',
-        status: 'CONSTRUCTED',
-        raisedAmount: 120000,
-        targetAmount: 120000,
-        constructionProgress: 45,
-        dailyRevenue: 0,
-        totalProductionKwh: 0,
-        nominalPower: 8.0,
-        currentWattage: 0,
-        voltage: 0
-    },
-    {
-        id: 4,
-        name: 'Treetino Unit [Oslo]',
-        location: 'Oslo, NO',
-        yieldApy: '11% APY',
-        price: 900,
-        type: 'Wind Tree',
-        color: 'from-cyan-400 to-blue-600',
-        status: 'OPEN',
-        raisedAmount: 45000,
-        targetAmount: 90000,
-        constructionProgress: 0,
-        dailyRevenue: 0,
-        totalProductionKwh: 0,
-        nominalPower: 6.5,
-        currentWattage: 0,
-        voltage: 0
-    },
-    {
-        id: 5,
-        name: 'Treetino Unit [Miami]',
-        location: 'Miami, USA',
-        yieldApy: '14% APY',
-        price: 1100,
-        type: 'Solar Tree',
-        color: 'from-yellow-400 to-orange-500',
-        status: 'OPEN',
-        raisedAmount: 5000,
-        targetAmount: 110000,
-        constructionProgress: 0,
-        dailyRevenue: 0,
-        totalProductionKwh: 0,
-        nominalPower: 7.2,
         currentWattage: 0,
         voltage: 0
     },
@@ -177,29 +128,52 @@ export const TreeContext = createContext<TreeContextType>({} as TreeContextType)
 
 // Mock initial investments so the user sees SOMETHING at start (e.g. 1 unit of Prague)
 const INITIAL_INVESTMENTS: UserInvestment[] = [
-    { assetId: 1, shareCount: 1, investedAt: new Date() }
+    { assetId: 1, shareCount: 1, investedAt: new Date(1704067200000) }
 ];
 
 export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
     // State
-    const [balance, setBalance] = useState(24500);
+    const [mntBalance, setMntBalance] = useState(24500); // Investable MNT (Principal)
+    const [treeBalance, setTreeBalance] = useState(0); // Yield (TREE Tokens)
     const [evMode, setEvMode] = useState(false);
 
     const [assets, setAssets] = useState<Asset[]>(INITIAL_ASSETS);
     const [userInvestments, setUserInvestments] = useState<UserInvestment[]>(INITIAL_INVESTMENTS);
 
     const { address, isConnected } = useAccount();
-    const { data: balanceData } = useBalance({
-        address: address,
+
+    const { data: mntBalanceData } = useBalance({ address });
+
+    // TREE Token (Yield) Balance
+    const { data: treeTokenData } = useReadContract({
+        address: TREE_TOKEN_ADDRESS,
+        abi: TREE_TOKEN_ABI,
+        functionName: 'balanceOf',
+        args: address ? [address] : undefined,
+        query: {
+            enabled: !!address,
+            refetchInterval: 3000,
+        }
     });
 
     useEffect(() => {
-        if (isConnected && balanceData) {
-            // Use real wallet balance (formatted from wei)
-            const formattedBalance = formatUnits(balanceData.value, balanceData.decimals);
-            setBalance(parseFloat(formattedBalance));
+        if (isConnected && treeTokenData !== undefined) {
+            const val = formatUnits(treeTokenData as bigint, 18);
+            setTreeBalance(parseFloat(val));
         }
-    }, [isConnected, balanceData]);
+    }, [isConnected, treeTokenData]);
+
+    // Sync MNT Balance from Wallet
+    useEffect(() => {
+        if (isConnected && mntBalanceData) {
+            const val = formatUnits(mntBalanceData.value, mntBalanceData.decimals);
+            setMntBalance(parseFloat(val));
+        }
+    }, [isConnected, mntBalanceData]);
+
+    // Helpers
+    const depositMnt = (amount: number) => setMntBalance(prev => prev + amount);
+    const withdrawMnt = (amount: number) => setMntBalance(prev => Math.max(0, prev - amount));
 
     useEffect(() => {
         const fetchData = async () => {
@@ -207,17 +181,12 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
                 const res = await fetch('https://treetino-victronenergy.up.railway.app/api/status');
                 const data = await res.json();
 
-                // { solarW: number, soc: number, netPowerW: number, isBulbOn: boolean, timestamp: string }
-
                 setAssets(prevAssets => prevAssets.map(asset => {
-                    // Only map real data to Asset ID 1 (Prague) for now
                     if (asset.id === 1 && asset.status === 'LIVE') {
-                        // Sync Verification Data
                         let verification = asset.verification;
                         const now = Date.now();
                         const timeSinceLastVerify = now - (verification?.timestamp || 0);
 
-                        // Mock new imprint if > 15 mins
                         if (timeSinceLastVerify > 15 * 60 * 1000) {
                             verification = {
                                 timestamp: now,
@@ -239,45 +208,62 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
                             verification
                         };
                     }
-
-                    // Keep other assets simulated or zeroed
                     return asset;
                 }));
 
-                // Update Balance logic (simplified)
-                // If NOT connected to wallet, use simulation. If connected, balance comes from chain.
+                // TREE Token Yield Generation (Based on Ownership)
+                // Only generate yield for users who own shares in LIVE assets
                 if (!isConnected) {
-                    const cycleYield = (data.solarW * 0.005); // Mock yield calculation based on real W
+                    // Calculate yield for each LIVE asset the user owns
+                    let totalYieldThisCycle = 0;
+
+                    userInvestments.forEach(investment => {
+                        const asset = assets.find(a => a.id === investment.assetId);
+                        if (asset && asset.status === 'LIVE') {
+                            // Yield per share = (asset's current production * yield rate) / total shares
+                            // For simplicity, assume each asset has 100 total shares available
+                            const totalShares = asset.targetAmount / asset.price;
+                            const userSharePercentage = investment.shareCount / totalShares;
+
+                            // Generate TREE tokens based on energy production and ownership
+                            const assetYieldThisCycle = (asset.currentWattage * 0.005); // Base yield from energy
+                            const userYieldFromAsset = assetYieldThisCycle * userSharePercentage;
+
+                            totalYieldThisCycle += userYieldFromAsset;
+                        }
+                    });
+
+                    if (totalYieldThisCycle > 0) {
+                        setTreeBalance(prev => +(prev + totalYieldThisCycle).toFixed(4));
+                    }
+
+                    // EV Cost (operational expense, paid in MNT)
                     const evCost = evMode ? 0.05 : 0;
-                    setBalance(prev => +(prev + cycleYield - evCost).toFixed(4));
+                    if (evCost > 0) {
+                        setMntBalance(prev => +(prev - evCost).toFixed(4));
+                    }
                 }
 
             } catch (err) {
                 console.error("Failed to fetch live status:", err);
-
-                // Fallback: If live data fails, restore state from last immutable on-chain imprint
-                setAssets(prevAssets => prevAssets.map(asset => {
-                    if (asset.id === 1 && asset.status === 'LIVE' && asset.verification) {
-                        return {
-                            ...asset,
-                            currentWattage: asset.verification.values.solarW,
-                            batteryLevel: asset.verification.values.battery,
-                            voltage: 48.0,
-                            // Mark as relying on verification data implicitly
-                        };
-                    }
-                    return asset;
-                }));
             }
         };
 
         const timer = setInterval(fetchData, 2000);
-        fetchData(); // Initial call
+        fetchData();
 
         return () => clearInterval(timer);
-    }, [evMode, isConnected]);
+    }, [evMode, isConnected, userInvestments, assets]);
+
+    const { writeContract } = useWriteContract();
 
     const investInAsset = (assetId: number, amount: number) => {
+        // Check MNT Balance
+        if (amount > mntBalance) {
+            alert("Insufficient MNT Balance. Please Deposit funds.");
+            return;
+        }
+
         const assetIndex = assets.findIndex(a => a.id === assetId);
         if (assetIndex === -1) return;
         const asset = assets[assetIndex];
@@ -287,14 +273,34 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
             return;
         }
 
-        if (amount > balance) {
-            alert("Insufficient funds!");
+        // If connected, we enforce on-chain transaction
+        if (isConnected) {
+            try {
+                writeContract({
+                    address: TREE_VAULT_ADDRESS,
+                    abi: TREE_VAULT_ABI,
+                    functionName: 'deposit',
+                    value: parseUnits(amount.toString(), 18), // MNT uses 18 decimals
+                    args: [],
+                });
+            } catch (err) {
+                console.error("Investment Transaction Failed:", err);
+                return; // Don't update UI if tx fails
+            }
+        } else {
+            alert("Please connect your wallet to invest!");
             return;
         }
 
-        setBalance(prev => prev - amount);
+        // Optimistic State Updates (So UI shows change immediately)
+        setMntBalance(prev => prev - amount);
 
-        const newRaised = Math.min(asset.raisedAmount + amount, asset.targetAmount);
+        // Convert MNT investment to USD for tracking raised amount
+        // Rate: 1 MNT = $10,000
+        const MNT_PRICE_USD = 10000;
+        const investmentInUsd = amount * MNT_PRICE_USD;
+
+        const newRaised = Math.min(asset.raisedAmount + investmentInUsd, asset.targetAmount);
         const newStatus = newRaised >= asset.targetAmount ? 'CONSTRUCTED' : 'OPEN';
 
         const updatedAssets = [...assets];
@@ -305,8 +311,8 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
         };
         setAssets(updatedAssets);
 
-        // Shares calculation (Units)
-        const units = amount / asset.price;
+        // Shares calculation (Units) - based on USD price
+        const units = investmentInUsd / asset.price;
 
         setUserInvestments(prev => {
             const existing = prev.find(i => i.assetId === assetId);
@@ -334,7 +340,10 @@ export const TreeProvider = ({ children }: { children: React.ReactNode }) => {
         <TreeContext.Provider value={{
             totalPortfolioValue,
             totalDailyRevenue,
-            userBalance: balance,
+            userBalance: mntBalance,
+            yieldBalance: treeBalance,
+            depositMnt,
+            withdrawMnt,
             isEVCharging: evMode,
             toggleEV: () => setEvMode(!evMode),
             assets,

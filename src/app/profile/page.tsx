@@ -3,12 +3,53 @@
 import React, { useContext } from 'react';
 import { TreeContext } from '@/src/context/TreeContext';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useSendTransaction } from 'wagmi';
+import { parseEther } from 'viem';
+import { TransactionModal } from '@/src/components/TransactionModal';
+
+const TREASURY_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'; // Using a testnet account as treasury holder
 
 export default function ProfilePage() {
-    const { userBalance } = useContext(TreeContext);
+    const { userBalance, yieldBalance, depositMnt, withdrawMnt } = useContext(TreeContext);
+    const { sendTransaction } = useSendTransaction();
+
+    const [modalConfig, setModalConfig] = React.useState<{ isOpen: boolean; type: 'DEPOSIT' | 'WITHDRAW' }>({
+        isOpen: false,
+        type: 'DEPOSIT'
+    });
+
+    const handleDepositClick = () => setModalConfig({ isOpen: true, type: 'DEPOSIT' });
+    const handleWithdrawClick = () => setModalConfig({ isOpen: true, type: 'WITHDRAW' });
+    const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
+
+    const handleConfirmTransaction = (amountStr: string) => {
+        const amount = parseFloat(amountStr);
+        if (!amount) return;
+
+        if (modalConfig.type === 'DEPOSIT') {
+            sendTransaction({
+                to: TREASURY_ADDRESS,
+                value: parseEther(amountStr),
+            });
+            depositMnt(amount);
+        } else {
+            withdrawMnt(amount);
+            alert("Withdraw request processed. Funds will arrive shortly.");
+        }
+        closeModal();
+    };
 
     return (
         <div className="flex flex-col items-center pt-10 pb-20">
+            <TransactionModal
+                isOpen={modalConfig.isOpen}
+                onClose={closeModal}
+                title={modalConfig.type === 'DEPOSIT' ? 'Deposit Funds' : 'Withdraw Funds'}
+                type={modalConfig.type}
+                onConfirm={handleConfirmTransaction}
+                maxAmount={modalConfig.type === 'DEPOSIT' ? userBalance : yieldBalance}
+            />
+
             <div className="w-full max-w-2xl px-4">
                 <h1 className="text-3xl font-bold text-white mb-8">My Profile</h1>
 
@@ -37,7 +78,6 @@ export default function ProfilePage() {
 
                 {/* Wallet Section */}
                 <div className="glass rounded-3xl p-8 border border-white/5 mb-6 relative overflow-hidden group">
-                    {/* Background decoration */}
                     <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] group-hover:bg-primary/10 transition-colors pointer-events-none"></div>
 
                     <ConnectButton.Custom>
@@ -96,56 +136,62 @@ export default function ProfilePage() {
 
                             return (
                                 <>
-                                    <div className="flex justify-between items-start mb-2">
+                                    <div className="flex flex-col gap-6 mb-8">
                                         <div>
-                                            <p className="text-sm text-gray-400 font-medium mb-1">Total Balance</p>
-                                            <div className="text-4xl font-bold text-white font-mono tracking-tight drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
-                                                ${userBalance.toFixed(2)}
+                                            <p className="text-sm text-gray-400 font-medium mb-1 uppercase tracking-wider">Investable Balance</p>
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-4xl font-bold text-white font-mono tracking-tight drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                                                    {userBalance.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                                                </div>
+                                                <div className="px-2 py-1 rounded-lg bg-white/10 border border-white/20 flex items-center gap-1.5">
+                                                    <span className="text-sm font-bold text-white tracking-wider">MNT</span>
+                                                </div>
                                             </div>
                                         </div>
 
-                                        <button
-                                            onClick={openChainModal}
-                                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 hover:bg-white/5 transition-colors group/chain"
-                                        >
-                                            {chain.hasIcon && (
-                                                <div
-                                                    className="w-5 h-5 rounded-full overflow-hidden"
-                                                    style={{ background: chain.iconBackground }}
-                                                >
-                                                    {chain.iconUrl && (
-                                                        <img
-                                                            alt={chain.name ?? 'Chain icon'}
-                                                            src={chain.iconUrl}
-                                                            className="w-full h-full"
-                                                        />
-                                                    )}
+                                        <div>
+                                            <p className="text-sm text-gray-400 font-medium mb-1 uppercase tracking-wider">Yield Earned</p>
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-2xl font-bold text-primary font-mono tracking-tight">
+                                                    {yieldBalance.toLocaleString('en-US', { maximumFractionDigits: 4 })}
                                                 </div>
-                                            )}
-                                            <span className="text-xs font-bold text-gray-300 group-hover/chain:text-white">{chain.name}</span>
-                                        </button>
+                                                <div className="px-2 py-1 rounded-lg bg-primary/20 border border-primary/50 flex items-center gap-1.5">
+                                                    <span className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>forest</span>
+                                                    <span className="text-[10px] font-bold text-primary tracking-wider">TREE</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2 mb-8">
+                                    <div className="flex gap-4">
                                         <button
-                                            onClick={openAccountModal}
-                                            className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors group/addr"
+                                            onClick={handleDepositClick}
+                                            className="flex-1 py-3 rounded-xl bg-white text-black font-bold hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
                                         >
-                                            <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
-                                            <span className="text-xs font-mono text-primary group-hover/addr:text-white transition-colors">
-                                                {account.displayName}
-                                            </span>
-                                            <span className="material-symbols-outlined text-[10px] text-primary/50">open_in_new</span>
-                                        </button>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <button className="py-3 rounded-xl bg-white text-black font-bold hover:bg-gray-200 transition-colors shadow-lg">
+                                            <span className="material-symbols-outlined">add</span>
                                             Deposit
                                         </button>
-                                        <button className="py-3 rounded-xl bg-black/40 text-white font-bold border border-white/10 hover:bg-white/5 transition-colors">
+                                        <button
+                                            onClick={handleWithdrawClick}
+                                            className="flex-1 py-3 rounded-xl bg-white/10 border border-white/10 hover:bg-white/20 text-white font-bold transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <span className="material-symbols-outlined">arrow_outward</span>
                                             Withdraw
                                         </button>
+                                    </div>
+
+                                    <div className="mt-8 pt-6 border-t border-white/10">
+                                        <div className="flex justify-between items-center bg-black/40 rounded-xl p-3 border border-white/5">
+                                            <div className="flex items-center gap-2">
+                                                {chain.hasIcon && (
+                                                    <div className="w-5 h-5 rounded-full overflow-hidden">
+                                                        {chain.iconUrl && <img src={chain.iconUrl} alt={chain.name} className="w-full h-full" />}
+                                                    </div>
+                                                )}
+                                                <span className="text-xs font-mono text-gray-400">{chain.name}</span>
+                                            </div>
+                                            <button onClick={openChainModal} className="text-xs text-primary hover:underline">Switch</button>
+                                        </div>
                                     </div>
                                 </>
                             );
@@ -153,8 +199,7 @@ export default function ProfilePage() {
                     </ConnectButton.Custom>
                 </div>
 
-                {/* Settings List */}
-                <div className="glass rounded-3xl overflow-hidden border border-white/5">
+                <div className="glass rounded-3xl overflow-hidden border border-white/5 mb-6">
                     {[
                         { icon: 'settings', label: 'Account Settings' },
                         { icon: 'security', label: 'Security & 2FA' },

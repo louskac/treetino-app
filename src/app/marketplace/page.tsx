@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useMemo } from 'react';
 import { TreeContext, Asset } from '@/src/context/TreeContext';
 
 const FILTERS = ['All', 'Solar Tree', 'Wind Tree', 'Hybrid Tree'];
@@ -9,7 +9,16 @@ export default function MarketplacePage() {
     const { assets, investInAsset, userBalance } = useContext(TreeContext);
     const [activeFilter, setActiveFilter] = useState('All');
     const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-    const [investmentAmount, setInvestmentAmount] = useState<string>('');
+    const [investmentAmount, setInvestmentAmount] = useState<string>(''); // Now in USD
+    const [selectedToken, setSelectedToken] = useState<'MNT' | 'USDT' | 'USDC'>('MNT');
+
+    const MNT_PRICE_USD = 10000; // Fixed mock rate: 1 MNT = $10,000
+
+    // Get live asset data from context (updates after investment)
+    const liveAsset = useMemo(() => {
+        if (!selectedAsset) return null;
+        return assets.find(a => a.id === selectedAsset.id) || selectedAsset;
+    }, [selectedAsset, assets]);
 
     const filteredItems = activeFilter === 'All'
         ? assets
@@ -19,10 +28,13 @@ export default function MarketplacePage() {
         e.preventDefault();
         if (!selectedAsset) return;
 
-        const amount = parseFloat(investmentAmount);
-        if (isNaN(amount) || amount <= 0) return;
+        const amountUsd = parseFloat(investmentAmount);
+        if (isNaN(amountUsd) || amountUsd <= 0) return;
 
-        investInAsset(selectedAsset.id, amount);
+        // Convert USD to MNT for the actual contract call
+        const amountMnt = amountUsd / MNT_PRICE_USD;
+
+        investInAsset(selectedAsset.id, amountMnt);
         setInvestmentAmount('');
         // Don't close immediately so user sees the progress update
     };
@@ -147,27 +159,27 @@ export default function MarketplacePage() {
             </div>
 
             {/* Asset Details Overlay */}
-            {selectedAsset && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            {liveAsset && (
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
                     <div
                         className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
                         onClick={() => setSelectedAsset(null)}
                     ></div>
 
-                    <div className="relative w-full max-w-lg bg-[#0F172A] sm:rounded-3xl rounded-t-3xl border border-white/10 shadow-2xl p-6 overflow-hidden animate-float-up max-h-[90vh] overflow-y-auto no-scrollbar">
+                    <div className="relative w-full max-w-lg bg-[#0F172A] sm:rounded-3xl rounded-t-3xl border border-white/10 shadow-2xl p-6 overflow-hidden animate-float-up max-h-[90vh] overflow-y-auto no-scrollbar pb-32">
                         {/* Modal Header */}
                         <div className="flex items-center justify-between mb-6 relative z-10">
                             <div className="flex items-center gap-4">
-                                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${selectedAsset.color} p-[1px]`}>
+                                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${liveAsset.color} p-[1px]`}>
                                     <div className="w-full h-full rounded-2xl bg-[#0F172A] flex items-center justify-center">
                                         <span className="material-symbols-outlined text-white text-2xl">
-                                            {selectedAsset.type === 'Solar Tree' ? 'solar_power' : selectedAsset.type === 'Wind Tree' ? 'wind_power' : 'energy_savings_leaf'}
+                                            {liveAsset.type === 'Solar Tree' ? 'solar_power' : liveAsset.type === 'Wind Tree' ? 'wind_power' : 'energy_savings_leaf'}
                                         </span>
                                     </div>
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold text-white leading-tight">{selectedAsset.name}</h2>
-                                    <p className="text-sm text-gray-400">{selectedAsset.type} • {selectedAsset.location}</p>
+                                    <h2 className="text-xl font-bold text-white leading-tight">{liveAsset.name}</h2>
+                                    <p className="text-sm text-gray-400">{liveAsset.type} • {liveAsset.location}</p>
                                 </div>
                             </div>
                             <button
@@ -182,11 +194,11 @@ export default function MarketplacePage() {
                         <div className="bg-white/5 rounded-2xl p-5 mb-6 border border-white/5 relative z-10">
                             <div className="flex justify-between items-center mb-4">
                                 <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Current Status</span>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedAsset.status === 'LIVE' ? 'border-secondary/50 text-secondary bg-secondary/10' :
-                                        selectedAsset.status === 'CONSTRUCTED' ? 'border-warning/50 text-warning bg-warning/10' :
-                                            'border-primary/50 text-primary bg-primary/10'
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${liveAsset.status === 'LIVE' ? 'border-secondary/50 text-secondary bg-secondary/10' :
+                                    liveAsset.status === 'CONSTRUCTED' ? 'border-warning/50 text-warning bg-warning/10' :
+                                        'border-primary/50 text-primary bg-primary/10'
                                     }`}>
-                                    {selectedAsset.status}
+                                    {liveAsset.status}
                                 </span>
                             </div>
 
@@ -194,58 +206,58 @@ export default function MarketplacePage() {
                             <div className="relative pt-2 pb-6">
                                 <div className="absolute top-[14px] left-0 right-0 h-1 bg-white/10 rounded-full"></div>
                                 <div className="absolute top-[14px] left-0 h-1 bg-gradient-to-r from-primary to-secondary rounded-full transition-all duration-1000"
-                                    style={{ width: selectedAsset.status === 'LIVE' ? '100%' : selectedAsset.status === 'CONSTRUCTED' ? '66%' : '33%' }}>
+                                    style={{ width: liveAsset.status === 'LIVE' ? '100%' : liveAsset.status === 'CONSTRUCTED' ? '66%' : '33%' }}>
                                 </div>
                                 <div className="flex justify-between relative text-[10px] font-bold uppercase text-gray-500">
                                     <div className="flex flex-col items-center gap-2">
-                                        <div className={`w-3 h-3 rounded-full border-2 ${selectedAsset.status !== 'OPEN' ? 'bg-primary border-primary' : 'bg-[#0F172A] border-primary'} z-10`}></div>
-                                        <span className={selectedAsset.status === 'OPEN' ? 'text-primary' : ''}>Fundraising</span>
+                                        <div className={`w-3 h-3 rounded-full border-2 ${liveAsset.status !== 'OPEN' ? 'bg-primary border-primary' : 'bg-[#0F172A] border-primary'} z-10`}></div>
+                                        <span className={liveAsset.status === 'OPEN' ? 'text-primary' : ''}>Fundraising</span>
                                     </div>
                                     <div className="flex flex-col items-center gap-2">
-                                        <div className={`w-3 h-3 rounded-full border-2 ${['CONSTRUCTED', 'LIVE'].includes(selectedAsset.status) ? 'bg-warning border-warning' : 'bg-[#0F172A] border-white/20'} z-10`}></div>
-                                        <span className={selectedAsset.status === 'CONSTRUCTED' ? 'text-warning' : ''}>Building</span>
+                                        <div className={`w-3 h-3 rounded-full border-2 ${['CONSTRUCTED', 'LIVE'].includes(liveAsset.status) ? 'bg-warning border-warning' : 'bg-[#0F172A] border-white/20'} z-10`}></div>
+                                        <span className={liveAsset.status === 'CONSTRUCTED' ? 'text-warning' : ''}>Building</span>
                                     </div>
                                     <div className="flex flex-col items-center gap-2">
-                                        <div className={`w-3 h-3 rounded-full border-2 ${selectedAsset.status === 'LIVE' ? 'bg-secondary border-secondary' : 'bg-[#0F172A] border-white/20'} z-10`}></div>
-                                        <span className={selectedAsset.status === 'LIVE' ? 'text-secondary' : ''}>Live</span>
+                                        <div className={`w-3 h-3 rounded-full border-2 ${liveAsset.status === 'LIVE' ? 'bg-secondary border-secondary' : 'bg-[#0F172A] border-white/20'} z-10`}></div>
+                                        <span className={liveAsset.status === 'LIVE' ? 'text-secondary' : ''}>Live</span>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Dynamic Content based on status */}
                             <div className="space-y-4 mt-2">
-                                {selectedAsset.status === 'OPEN' && (
+                                {liveAsset.status === 'OPEN' && (
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span className="text-gray-400">Raised so far</span>
-                                            <span className="text-white font-mono">${selectedAsset.raisedAmount.toLocaleString()} / ${selectedAsset.targetAmount.toLocaleString()}</span>
+                                            <span className="text-white font-mono">${liveAsset.raisedAmount.toLocaleString()} / ${liveAsset.targetAmount.toLocaleString()}</span>
                                         </div>
                                         <div className="h-2 w-full bg-black/40 rounded-full overflow-hidden">
-                                            <div className="h-full bg-primary" style={{ width: `${(selectedAsset.raisedAmount / selectedAsset.targetAmount) * 100}%` }}></div>
+                                            <div className="h-full bg-primary" style={{ width: `${(liveAsset.raisedAmount / liveAsset.targetAmount) * 100}%` }}></div>
                                         </div>
                                     </div>
                                 )}
-                                {selectedAsset.status === 'CONSTRUCTED' && (
+                                {liveAsset.status === 'CONSTRUCTED' && (
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span className="text-gray-400">Construction Progress</span>
-                                            <span className="text-warning font-mono">{Math.round(selectedAsset.constructionProgress)}%</span>
+                                            <span className="text-warning font-mono">{Math.round(liveAsset.constructionProgress)}%</span>
                                         </div>
                                         <div className="h-2 w-full bg-black/40 rounded-full overflow-hidden">
-                                            <div className="h-full bg-warning striped-bar" style={{ width: `${selectedAsset.constructionProgress}%` }}></div>
+                                            <div className="h-full bg-warning striped-bar" style={{ width: `${liveAsset.constructionProgress}%` }}></div>
                                         </div>
                                         <p className="text-xs text-gray-500 mt-2">* Estimated completion: 2 weeks</p>
                                     </div>
                                 )}
-                                {selectedAsset.status === 'LIVE' && (
+                                {liveAsset.status === 'LIVE' && (
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="bg-black/20 p-3 rounded-xl border border-white/5">
                                             <p className="text-[10px] text-gray-500 uppercase">Daily Revenue</p>
-                                            <p className="text-xl font-bold text-white">${selectedAsset.dailyRevenue}</p>
+                                            <p className="text-xl font-bold text-white">${liveAsset.dailyRevenue}</p>
                                         </div>
                                         <div className="bg-black/20 p-3 rounded-xl border border-white/5">
                                             <p className="text-[10px] text-gray-500 uppercase">Total Produced</p>
-                                            <p className="text-xl font-bold text-primary">{Math.round(selectedAsset.totalProductionKwh)} kWh</p>
+                                            <p className="text-xl font-bold text-primary">{Math.round(liveAsset.totalProductionKwh)} kWh</p>
                                         </div>
                                     </div>
                                 )}
@@ -253,33 +265,59 @@ export default function MarketplacePage() {
                         </div>
 
                         {/* Investment Form (Only for OPEN assets) */}
-                        {selectedAsset.status === 'OPEN' ? (
+                        {liveAsset.status === 'OPEN' ? (
                             <form onSubmit={handleInvest} className="relative z-10">
+
+                                {/* Payment Method Selector (Visual Only) */}
+                                <div className="flex gap-2 mb-4">
+                                    {['MNT', 'USDT', 'USDC'].map((token) => (
+                                        <button
+                                            key={token}
+                                            type="button"
+                                            onClick={() => setSelectedToken(token as any)}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-2 ${selectedToken === token
+                                                ? 'bg-primary/20 border-primary text-white shadow-[0_0_10px_rgba(0,224,255,0.2)]'
+                                                : 'bg-white/5 border-white/10 text-gray-500 hover:bg-white/10'
+                                                }`}
+                                        >
+                                            {token === 'MNT' && (
+                                                <div className="w-2 h-2 rounded-full bg-white"></div>
+                                            )}
+                                            {token}
+                                        </button>
+                                    ))}
+                                </div>
+
                                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Investment Amount (USD)</label>
                                 <div className="relative mb-4">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">$</span>
                                     <input
                                         type="number"
                                         value={investmentAmount}
                                         onChange={(e) => setInvestmentAmount(e.target.value)}
-                                        placeholder={`Min $${selectedAsset.price}`}
-                                        className="w-full bg-black/30 border border-white/10 rounded-xl py-4 pl-8 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-primary transition-colors font-mono"
+                                        placeholder={`Min $${(liveAsset.price * MNT_PRICE_USD).toFixed(0)}`}
+                                        className="w-full bg-black/30 border border-white/10 rounded-xl py-4 pl-8 pr-16 text-white placeholder-gray-600 focus:outline-none focus:border-primary transition-colors font-mono"
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={() => setInvestmentAmount(selectedAsset.price.toString())}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-white/10 rounded text-xs text-primary hover:bg-white/20"
-                                    >
-                                        MIN
-                                    </button>
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                        <span className="text-xs text-gray-500 font-mono">
+                                            ≈ {(parseFloat(investmentAmount || '0') / MNT_PRICE_USD).toFixed(1)} MNT
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setInvestmentAmount((userBalance * MNT_PRICE_USD).toFixed(2))}
+                                            className="px-2 py-1 bg-white/10 rounded text-xs text-primary hover:bg-white/20"
+                                        >
+                                            MAX
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="flex justify-between text-xs text-gray-500 mb-6">
-                                    <span>Available Balance: <span className="text-white">${userBalance.toLocaleString()}</span></span>
-                                    <span>Est. Yield: <span className="text-secondary">{selectedAsset.yieldApy}</span></span>
+                                    <span>Available: <span className="text-white">{userBalance.toLocaleString()} MNT</span> <span className="text-gray-600">(≈${(userBalance * MNT_PRICE_USD).toLocaleString()})</span></span>
+                                    <span>Rate: <span className="text-gray-400">1 MNT = ${MNT_PRICE_USD}</span></span>
                                 </div>
                                 <button
                                     type="submit"
-                                    disabled={!investmentAmount || parseFloat(investmentAmount) > userBalance}
+                                    disabled={!investmentAmount || (parseFloat(investmentAmount) / MNT_PRICE_USD) > userBalance}
                                     className="w-full py-4 bg-gradient-to-r from-primary to-blue-500 rounded-xl font-bold text-black shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Confirm Investment
@@ -293,10 +331,11 @@ export default function MarketplacePage() {
                         )}
 
                         {/* Decorative BG in Modal */}
-                        <div className={`absolute top-0 right-0 w-64 h-64 bg-gradient-to-br ${selectedAsset.color} opacity-10 blur-[80px] pointer-events-none`}></div>
+                        <div className={`absolute top-0 right-0 w-64 h-64 bg-gradient-to-br ${liveAsset.color} opacity-10 blur-[80px] pointer-events-none`}></div>
                     </div>
                 </div>
-            )}
+            )
+            }
         </div>
     );
 }

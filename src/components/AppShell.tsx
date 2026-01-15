@@ -12,14 +12,11 @@ const NAV_ITEMS = [
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-    const { userBalance } = useContext(TreeContext);
+    const { userBalance, yieldBalance } = useContext(TreeContext);
     const pathname = usePathname();
 
     const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-        }).format(amount);
+        return amount.toLocaleString('en-US', { maximumFractionDigits: 2 });
     };
 
     return (
@@ -49,11 +46,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                 </div>
 
-                <div className="flex flex-col items-end">
-                    <span className="text-[10px] text-primary/80 uppercase tracking-widest font-bold mb-0.5">Balance</span>
-                    <span className="text-lg font-bold text-white font-mono drop-shadow-[0_0_8px_rgba(0,224,255,0.5)]">
-                        {formatCurrency(userBalance)}
-                    </span>
+                <div className="flex flex-col items-end gap-0.5">
+                    {/* MNT Balance */}
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-gray-300 font-mono">
+                            {formatCurrency(userBalance)}
+                        </span>
+                        <div className="px-1.5 py-0.5 rounded bg-white/10 border border-white/20">
+                            <span className="text-[8px] font-bold text-white tracking-wider">MNT</span>
+                        </div>
+                    </div>
+
+                    {/* TREE Yield */}
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-primary font-mono drop-shadow-[0_0_8px_rgba(0,224,255,0.5)]">
+                            {yieldBalance.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="material-symbols-outlined text-primary text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>forest</span>
+                    </div>
                 </div>
             </header>
 
